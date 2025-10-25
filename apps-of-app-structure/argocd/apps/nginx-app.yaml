@@ -5,15 +5,26 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  # Use "sources" (plural) for multiple sources
-  sources:
+  
+  sources:  # ← Changed from "source:" (plural!)
+  # Source 1: apps/nginx
   - repoURL: https://github.com/your-org/your-repo.git
+    targetRevision: main
     path: apps/nginx
+    kustomize:
+      version: v5.0.0
+  
+  # Source 2: apps1/nginx
   - repoURL: https://github.com/your-org/your-repo.git
+    targetRevision: main
     path: apps1/nginx
+    kustomize:
+      version: v5.0.0
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: nginx
+  
   syncPolicy:
     automated:
       prune: true

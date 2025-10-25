@@ -4,7 +4,7 @@ metadata:
   name: nginx1
   namespace: nginx
   labels:
-    app: nginx
+    app: nginx1
 spec:
   type: LoadBalancer
   ports:
@@ -13,4 +13,4 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: nginx
+    app: nginx1
