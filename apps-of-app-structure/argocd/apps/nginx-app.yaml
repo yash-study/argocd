@@ -5,13 +5,20 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: https://github.com/your-org/your-repo.git  # Update with your Git repository
+  
+  # Use "sources" (plural) for multiple sources
+  sources:
+  - repoURL: https://github.com/your-org/your-repo.git
     targetRevision: main
     path: apps/nginx
+  - repoURL: https://github.com/your-org/your-repo.git
+    targetRevision: main
+    path: apps1/nginx
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: nginx
+  
   syncPolicy:
     automated:
       prune: true
