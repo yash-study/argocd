@@ -1,11 +1,28 @@
 # ============================================
-# REPO 2: DEPLOYMENT REPOSITORY
+# REPO 1: CODE REPOSITORY - ALL-IN-ONE
 # File: cloudbuild.yaml
-# Place in argocd repo root
 # ============================================
-
 steps:
-  # Step 1: Clone repository with HTTPS + Token
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/$_APP_NAME:$SHORT_SHA'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+    id: 'build-image'
+  
+  # Step 2: Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/$_APP_NAME:$SHORT_SHA'
+    id: 'push-image'
+    waitFor: ['build-image']
+  
+  # Step 3: Update deployment repo directly
   - name: 'gcr.io/cloud-builders/git'
     secretEnv: ['GITHUB_TOKEN']
     entrypoint: 'bash'
@@ -13,100 +30,65 @@ steps:
       - '-c'
       - |
         # Configure git
-        git config --global user.email "yashjain2778@mgail.com"
-        git config --global user.name "yash-study"
+        git config --global user.email "cloudbuild@focal-psyche-460009-a5.iam.gserviceaccount.com"
+        git config --global user.name "Cloud Build Bot"
         
-        # Clone with token
-        git clone https://$$GITHUB_TOKEN@github.com/yash-study/argocd.git repo
+        # Clone deployment repo
+        echo "Cloning deployment repository..."
+        git clone https://$$GITHUB_TOKEN@github.com/yash-study/argocd.git deployment-repo
+        cd deployment-repo
         
-        echo "✅ Repository cloned"
-    id: 'clone-repo'
-
-  # Step 2: Update deployment files with new image tag
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        cd repo
-        
-        # Get image tag from Repo 1
-        IMAGE_TAG="${_IMAGE_TAG}"
-        IMAGE_NAME="${_IMAGE_NAME}"
+        # Update deployment.yaml
+        IMAGE_TAG="$SHORT_SHA"
+        IMAGE_NAME="$_APP_NAME"
         IMAGE_REGISTRY="us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash"
-        
         FULL_IMAGE="$${IMAGE_REGISTRY}/$${IMAGE_NAME}:$${IMAGE_TAG}"
         
         echo "================================================"
-        echo "Updating deployment files with new image:"
-        echo "Image: $${FULL_IMAGE}"
+        echo "Updating deployment with image: $${FULL_IMAGE}"
         echo "================================================"
         
-        # Update deployment.yaml
         if [ -f "apps-of-app-structure/apps/nginx/deployment.yaml" ]; then
-          echo "Updating apps-of-app-structure/apps/nginx/deployment.yaml..."
           sed -i "s|image:.*$${IMAGE_NAME}:.*|image: $${FULL_IMAGE}|g" apps-of-app-structure/apps/nginx/deployment.yaml
-          echo "✅ Updated deployment.yaml"
+          
+          # Show changes
+          echo "Changes made:"
+          git diff apps-of-app-structure/apps/nginx/deployment.yaml
+          
+          # Commit and push
+          git add apps-of-app-structure/apps/nginx/deployment.yaml
+          git commit -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG} - Image: ${FULL_IMAGE} - Build: $BUILD_ID"
+          
+          git push https://$$GITHUB_TOKEN@github.com/yash-study/argocd.git main
+          
+          echo "================================================"
+          echo "✅ Deployment updated successfully!"
+          echo "🎯 ArgoCD will sync these changes"
+          echo "================================================"
+        else
+          echo "❌ Deployment file not found!"
+          exit 1
         fi
-        
-        # Show changes
-        echo ""
-        echo "================================================"
-        echo "Changes made:"
-        echo "================================================"
-        git diff
-        echo "================================================"
-    id: 'update-deployments'
-    waitFor: ['clone-repo']
-
-  # Step 3: Commit and push changes
-  - name: 'gcr.io/cloud-builders/git'
-    secretEnv: ['GITHUB_TOKEN']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        cd repo
-        
-        # Check if there are changes
-        if git diff --quiet; then
-          echo "⚠️  No changes to commit"
-          exit 0
-        fi
-        
-        # Add changes
-        git add apps-of-app-structure/apps/nginx/deployment.yaml
-        
-        # Commit
-        git commit -m "🚀 Deploy: ${_IMAGE_NAME}:${_IMAGE_TAG}
-
-        Image: us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/${_IMAGE_NAME}:${_IMAGE_TAG}
-        Triggered by: Code repository build
-        Build ID: $BUILD_ID
-        "
-        
-        # Push with token
-        echo "Pushing to GitHub..."
-        git push https://$$GITHUB_TOKEN@github.com/yash-study/argocd.git main
-        
-        echo "✅ Changes pushed to deployment repository"
-        echo "🎯 ArgoCD will now sync these changes"
-    id: 'commit-push'
-    waitFor: ['update-deployments']
+    id: 'update-deployment'
+    waitFor: ['push-image']
 
 # Configure secrets
 availableSecrets:
   secretManager:
-    - versionName: projects/339960399182/secrets/yash-personal-githubtoken/versions/latest
+    - versionName: projects/339960399182/secrets/yash-personal-githubtoken/versions/1
       env: 'GITHUB_TOKEN'
 
-# Substitutions received from Repo 1
-substitutions:
-  _IMAGE_TAG: 'latest'
-  _IMAGE_NAME: 'nginx'
+# Images pushed to Artifact Registry
+images:
+  - 'us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/$_APP_NAME:$SHORT_SHA'
 
 # Timeout
-timeout: '600s'
+timeout: '1200s'
+
+# Substitutions
+substitutions:
+  _APP_NAME: 'nginx'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
