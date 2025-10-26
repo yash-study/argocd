@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/nginx:b47566b
+        image: us-central1-docker.pkg.dev/focal-psyche-460009-a5/encodex-yash/nginx:d3b1cf2
         ports:
         - containerPort: 80
           name: http
